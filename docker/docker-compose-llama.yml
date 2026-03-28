@@ -35,7 +35,7 @@ services:
     environment:
       FUNCTION: frontend
       MODEL_PATH: /app/models/DeepSeek-R1-Distill-Qwen-7B.Q8_0.gguf
-      MCP_URL: "http://127.0.0.1:3000/mcp"
+      MODEL_CHAT_TEMPLATE:
       RPC_HOST: 127.0.0.1,192.168.1.209
       RPC_PORT: 50052
       WEB_HOST: 0.0.0.0

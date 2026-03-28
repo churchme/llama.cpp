@@ -2,7 +2,7 @@ FROM opensuse/tumbleweed
 
 ENV FUNCTION=frontend \
     MODEL_PATH=/app/models/super-model-here.ggpf \
-    MCP_URL=127.0.0.1:3000/mcp \
+    MODEL_CHAT_TEMPLATE= \
     RPC_HOST=0.0.0.0 \
     RPC_PORT=50052 \
     NUM_THREADS=16 \
@@ -11,7 +11,6 @@ ENV FUNCTION=frontend \
     ## FUNCTION="frontend" options
     WEB_HOST=0.0.0.0 \
     WEB_PORT=8734
-    # MODEL_CHAT_TEMPLATE=template
 
 # skip openblas-devel until fixed upstream for RPC
 RUN zypper -n update && \
