@@ -8,7 +8,7 @@
 .vscode/
 .DS_Store
 
-build*/
+# build*/
 
 tools/ui/node_modules/
 

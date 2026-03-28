@@ -1,0 +1,49 @@
+services:
+  llama-compute:
+    image: woodhouse:5000/woodhouse-llama
+    container_name: llama-compute   ## Main compute node
+    restart: unless-stopped
+    volumes:
+      - /ai-models:/app/models:ro
+    environment:
+      FUNCTION: compute
+      RPC_HOST: 0.0.0.0
+      RPC_PORT: 50052
+      RPC_CACHE: true
+      NUM_THREADS: 16
+    security_opt:
+      - label:disable
+      - seccomp:unconfined
+    cap_add:
+      - SYS_ADMIN
+    deploy:
+      resources:
+        limits:
+          cpus: '16.0'  # ~25% cores; adjust
+          memory: 50G  # Safe for 64GB total
+        reservations:
+          cpus: '8.0'
+          memory: 24G
+    network_mode: host
+
+  llama-frontend:
+    image: woodhouse:5000/woodhouse-llama
+    container_name: llama-frontend    ## RPC Coordinator and frontend
+    restart: unless-stopped
+    volumes:
+      - /ai-models:/app/models:ro
+    environment:
+      FUNCTION: frontend
+      MODEL_PATH: /app/models/DeepSeek-R1-Distill-Qwen-7B.Q8_0.gguf
+      MCP_URL: "http://127.0.0.1:3000/mcp"
+      RPC_HOST: 127.0.0.1,192.168.1.209
+      RPC_PORT: 50052
+      WEB_HOST: 0.0.0.0
+      WEB_PORT: 8734
+      NUM_THREADS: 4
+    security_opt:
+      - label:disable
+      - seccomp:unconfined
+    cap_add:
+      - SYS_ADMIN
+    network_mode: host
