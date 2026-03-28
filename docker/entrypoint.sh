@@ -17,7 +17,7 @@ elif [[ $FUNCTION == "frontend" ]]; then
   rpc_list=$(printf "%s:50052," ${RPC_HOST//,/ })
   rpc_list="${rpc_list%,}"  # Trim trailing comma
 
-  if [[ -n ${MODEL_CHAT_TEMPLATE} ]]; then
+  if [[ ! -z ${MODEL_CHAT_TEMPLATE} ]]; then
     extra_llama_opts+=("--chat-template ${MODEL_CHAT_TEMPLATE}")
   fi
   exec llama-server \
@@ -26,6 +26,6 @@ elif [[ $FUNCTION == "frontend" ]]; then
                   --model ${MODEL_PATH} \
                   --threads ${NUM_THREADS}\
                   --rpc ${rpc_list} \
-                  --webui-mcp-proxy ${MCP_URL} \
+                  --webui-mcp-proxy \
                   ${extra_llama_opts[@]}
 fi
