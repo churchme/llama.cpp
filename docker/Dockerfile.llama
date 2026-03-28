@@ -1,0 +1,29 @@
+FROM opensuse/tumbleweed
+
+ENV FUNCTION=frontend \
+    MODEL_PATH=/app/models/super-model-here.ggpf \
+    MCP_URL=127.0.0.1:3000 \
+    RPC_HOST=0.0.0.0 \
+    RPC_PORT=50052 \
+    NUM_THREADS=16 \
+    # FUNCTION="compute" options
+    RPC_CACHE=true \
+    # FUNCTION="frontend" options
+    WEB_HOST=0.0.0.0 \
+    WEB_PORT=8734
+
+# skip openblas-devel until fixed upstream
+RUN zypper -n update && \
+    zypper -n install -y libgomp1-gcc7 && \
+    zypper -n clean
+
+# Copy in binaries, add to library path
+COPY build/bin/ /usr/local/bin/
+RUN  ldconfig /usr/local/bin
+
+COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/llama*
+
+WORKDIR /app
+
+ENTRYPOINT ["entrypoint.sh"]
