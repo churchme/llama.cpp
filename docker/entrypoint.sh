@@ -7,10 +7,23 @@ if [[ $FUNCTION == "compute" ]]; then
   if [[ $USE_CACHE == "true" ]]; then
     extra_llama_opts+=("-c")
   fi
+
+  if [[ $NUMA_TYPE == "numactl" ]]; then
+    echo Checking for numactl...
+    numactl --version
+    numa_exists=$?
+    if [[ $numa_exists -ne 0 ]]; then
+      echo numactl not found, change NUMA_TYPE var...
+      sleep 5
+      exit 1
+    fi
+  fi
   exec rpc-server \
                   --host ${RPC_HOST} \
                   --port ${RPC_PORT} \
                   --threads ${NUM_THREADS} \
+                  --numa ${NUMA_TYPE} \
+                  --mlock ${ENABLE_MLOCK} \
                   ${extra_llama_opts[@]}
 elif [[ $FUNCTION == "frontend" ]]; then
   echo Starting llama-server frontend node...
