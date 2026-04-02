@@ -11,16 +11,23 @@ services:
       RPC_PORT: 50052
       RPC_CACHE: true
       NUM_THREADS: 16
+      NUMA_TYPE: numactl
+      ENABLE_MLOCK: true
     security_opt:
       - label:disable
       - seccomp:unconfined
     cap_add:
       - SYS_ADMIN
+      - IPC_LOCK
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
     deploy:
       resources:
         limits:
-          cpus: '16.0'  # ~25% cores; adjust
-          memory: 50G  # Safe for 64GB total
+          cpus: '16.0'
+          memory: 50G
         reservations:
           cpus: '8.0'
           memory: 24G
