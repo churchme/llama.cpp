@@ -1,17 +1,18 @@
 services:
-  llama-compute:
-    image: woodhouse:5000/woodhouse-llama
+  llama-compute-node0:
+    image: woodhouse:5000/woodhouse-llama:1.0.0
     container_name: llama-compute   ## Main compute node
     restart: unless-stopped
     volumes:
       - /ai-models:/app/models:ro
+      - /sys/devices/system/node:/sys/devices/system/node
     environment:
       FUNCTION: compute
       RPC_HOST: 0.0.0.0
       RPC_PORT: 50052
       RPC_CACHE: true
       NUM_THREADS: 16
-      NUMA_TYPE: numactl
+      NUMA_NODE: 0
       ENABLE_MLOCK: true
     security_opt:
       - label:disable
@@ -26,15 +27,51 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '16.0'
-          memory: 50G
+          cpus: '10.0'
+          memory: 25G
         reservations:
           cpus: '8.0'
           memory: 24G
     network_mode: host
 
+  llama-compute-node1:
+    image: woodhouse:5000/woodhouse-llama:1.0.0
+    container_name: llama-compute   ## Main compute node
+    restart: unless-stopped
+    volumes:
+      - /ai-models:/app/models:ro
+      - /sys/devices/system/node:/sys/devices/system/node
+    environment:
+      FUNCTION: compute
+      RPC_HOST: 0.0.0.0
+      RPC_PORT: 50052
+      RPC_CACHE: true
+      NUM_THREADS: 16
+      NUMA_NODE: 1
+      ENABLE_MLOCK: true
+    security_opt:
+      - label:disable
+      - seccomp:unconfined
+    cap_add:
+      - SYS_ADMIN
+      - IPC_LOCK
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    deploy:
+      resources:
+        limits:
+          cpus: '10.0'
+          memory: 25G
+        reservations:
+          cpus: '8.0'
+          memory: 24G
+    network_mode: host
+
+
   llama-frontend:
-    image: woodhouse:5000/woodhouse-llama
+    image: woodhouse:5000/woodhouse-llama:1.0.0
     container_name: llama-frontend    ## RPC Coordinator and frontend
     restart: unless-stopped
     volumes:
@@ -43,8 +80,7 @@ services:
       FUNCTION: frontend
       MODEL_PATH: /app/models/DeepSeek-R1-Distill-Qwen-7B.Q8_0.gguf
       MODEL_CHAT_TEMPLATE:
-      RPC_HOST: 127.0.0.1,192.168.1.209
-      RPC_PORT: 50052
+      RPC_CLIENTS: 127.0.0.1:50052,127.0.0.1:50053,192.168.1.209
       WEB_HOST: 0.0.0.0
       WEB_PORT: 8734
       NUM_THREADS: 4

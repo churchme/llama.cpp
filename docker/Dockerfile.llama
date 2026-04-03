@@ -3,20 +3,21 @@ FROM opensuse/tumbleweed
 ENV FUNCTION=frontend \
     MODEL_PATH=/app/models/super-model-here.ggpf \
     MODEL_CHAT_TEMPLATE= \
-    RPC_HOST=0.0.0.0 \
-    RPC_PORT=50052 \
     NUM_THREADS=16 \
     ## FUNCTION="compute" options
+    RPC_HOST=0.0.0.0 \
+    RPC_PORT=50052 \
     RPC_CACHE=true \
-    NUMA_TYPE=numactl \
+    NUMA_NODE=0 \
     ENABLE_MLOCK=true \
     ## FUNCTION="frontend" options
+    RPC_CLIENTS=127.0.0.1:50052
     WEB_HOST=0.0.0.0 \
     WEB_PORT=8734
 
 # skip openblas-devel until fixed upstream for RPC
 RUN zypper -n update && \
-    zypper -n install -y libgomp1-gcc7 && \
+    zypper -n install -y libgomp1-gcc7 numactl && \
     zypper -n clean
 
 # Copy in binaries, add to library path
