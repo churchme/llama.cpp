@@ -1,7 +1,7 @@
 services:
   llama-compute-node0:
     image: woodhouse:5000/woodhouse-llama:1.0.0
-    container_name: llama-compute   ## Main compute node
+    container_name: llama-compute-node0   ## Main compute node
     restart: unless-stopped
     volumes:
       - /ai-models:/app/models:ro
@@ -11,32 +11,32 @@ services:
       RPC_HOST: 0.0.0.0
       RPC_PORT: 50052
       RPC_CACHE: true
-      NUM_THREADS: 16
+      NUM_THREADS: 12
       NUMA_NODE: 0
-      ENABLE_MLOCK: true
     security_opt:
       - label:disable
       - seccomp:unconfined
+    privileged: true
     cap_add:
       - SYS_ADMIN
+      - SYS_NICE
       - IPC_LOCK
     ulimits:
       memlock:
         soft: -1
         hard: -1
+    cpuset: "0,2,4,6,8,10,12,14,16,18,20,22"
     deploy:
       resources:
         limits:
-          cpus: '10.0'
-          memory: 25G
+          memory: 15G
         reservations:
-          cpus: '8.0'
-          memory: 24G
+          memory: 12G
     network_mode: host
 
   llama-compute-node1:
     image: woodhouse:5000/woodhouse-llama:1.0.0
-    container_name: llama-compute   ## Main compute node
+    container_name: llama-compute-node1   ## Main compute node
     restart: unless-stopped
     volumes:
       - /ai-models:/app/models:ro
@@ -44,29 +44,29 @@ services:
     environment:
       FUNCTION: compute
       RPC_HOST: 0.0.0.0
-      RPC_PORT: 50052
+      RPC_PORT: 50053
       RPC_CACHE: true
-      NUM_THREADS: 16
+      NUM_THREADS: 12
       NUMA_NODE: 1
-      ENABLE_MLOCK: true
     security_opt:
       - label:disable
       - seccomp:unconfined
+    privileged: true
     cap_add:
       - SYS_ADMIN
+      - SYS_NICE
       - IPC_LOCK
     ulimits:
       memlock:
         soft: -1
         hard: -1
+    cpuset: "1,3,5,7,9,11,13,15,17,19,21,23"
     deploy:
       resources:
         limits:
-          cpus: '10.0'
-          memory: 25G
+          memory: 15G
         reservations:
-          cpus: '8.0'
-          memory: 24G
+          memory: 12G
     network_mode: host
 
 
@@ -78,15 +78,18 @@ services:
       - /ai-models:/app/models:ro
     environment:
       FUNCTION: frontend
-      MODEL_PATH: /app/models/DeepSeek-R1-Distill-Qwen-7B.Q8_0.gguf
+      MODEL_PATH: /app/models/Qwen3.5-9B-Uncensored-HauhauCS-Aggressive-Q8_0.gguf
       MODEL_CHAT_TEMPLATE:
-      RPC_CLIENTS: 127.0.0.1:50052,127.0.0.1:50053,192.168.1.209
+      RPC_CLIENTS: 127.0.0.1:50052,127.0.0.1:50053,asushouse:50052
       WEB_HOST: 0.0.0.0
       WEB_PORT: 8734
       NUM_THREADS: 4
     security_opt:
       - label:disable
       - seccomp:unconfined
+    privileged: true
     cap_add:
       - SYS_ADMIN
+      - SYS_NICE
+      - IPC_LOCK
     network_mode: host

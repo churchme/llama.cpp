@@ -2,15 +2,16 @@
 
 extra_llama_opts=('')
 
+echo Checking for numactl...
+numactl --version
+numa_exists=$?
+
 if [[ $FUNCTION == "compute" ]]; then
   echo Starting rpc-server worker node...
   if [[ $USE_CACHE == "true" ]]; then
     extra_llama_opts+=("-c")
   fi
 
-  echo Checking for numactl...
-  numactl --version
-  numa_exists=$?
   if [[ $numa_exists -ne 0 ]]; then
     echo numactl not found...
     exec rpc-server \
@@ -36,6 +37,10 @@ elif [[ $FUNCTION == "frontend" ]]; then
   if [[ ! -z ${MODEL_CHAT_TEMPLATE} ]]; then
     extra_llama_opts+=("--chat-template ${MODEL_CHAT_TEMPLATE}")
   fi
+  if
+    extra_llama_opts+=("--numa numactl")
+  fi
+
   exec llama-server \
         --host ${WEB_HOST} \
         --port ${WEB_PORT} \
