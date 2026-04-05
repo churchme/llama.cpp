@@ -21,6 +21,7 @@ if [[ $FUNCTION == "compute" ]]; then
               ${extra_llama_opts[@]}
   else
     echo found numactl...starting on node ${NUMA_NODE}
+    echo 0 > /proc/sys/kernel/numa_balancing
     exec numactl \
               --cpunodebind=${NUMA_NODE} \
               --membind=${NUMA_NODE} \
@@ -37,8 +38,9 @@ elif [[ $FUNCTION == "frontend" ]]; then
   if [[ ! -z ${MODEL_CHAT_TEMPLATE} ]]; then
     extra_llama_opts+=("--chat-template ${MODEL_CHAT_TEMPLATE}")
   fi
-  if
+  if [[ $numa_exists -eq 0 ]]; then
     extra_llama_opts+=("--numa numactl")
+    echo 0 > /proc/sys/kernel/numa_balancing
   fi
 
   exec llama-server \
