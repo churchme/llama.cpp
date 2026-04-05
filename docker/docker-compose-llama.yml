@@ -69,7 +69,6 @@ services:
           memory: 12G
     network_mode: host
 
-
   llama-frontend:
     image: woodhouse:5000/woodhouse-llama:1.0.0
     container_name: llama-frontend    ## RPC Coordinator and frontend
