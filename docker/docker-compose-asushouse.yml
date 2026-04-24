@@ -1,0 +1,35 @@
+services:
+  llama-compute:
+    image: woodhouse:5000/woodhouse-llama:2.0.1-avx2
+    container_name: llama-compute
+    restart: unless-stopped
+    volumes:
+      - /ai-models:/app/models:ro
+    environment:
+      FUNCTION: compute
+      RPC_HOST: 0.0.0.0
+      RPC_PORT: 50052
+      RPC_CACHE: true
+      NUM_THREADS: 8
+      NUMA_NODE: 0
+    security_opt:
+      - label:disable
+      - seccomp:unconfined
+    privileged: true
+    cap_add:
+      - SYS_ADMIN
+      - SYS_NICE
+      - IPC_LOCK
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    deploy:
+      resources:
+        limits:
+          cpus: '4.0'
+          memory: 7.5G
+        reservations:
+          cpus: '3.0'
+          memory: 6G
+    network_mode: host

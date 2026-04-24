@@ -1,14 +1,15 @@
 services:
   llama-compute-node0:
-    image: woodhouse:5000/woodhouse-llama:1.0.0
+    image: woodhouse:5000/woodhouse-llama:2.0.1
     container_name: llama-compute-node0   ## Main compute node
     restart: unless-stopped
     volumes:
       - /ai-models:/app/models:ro
       - /sys/devices/system/node:/sys/devices/system/node
+      - /mnt/ramdisk/sockets:/tmp/sockets
     environment:
       FUNCTION: compute
-      RPC_HOST: 0.0.0.0
+      RPC_HOST: /tmp/sockets/rpc0.sock
       RPC_PORT: 50052
       RPC_CACHE: true
       NUM_THREADS: 12
@@ -33,17 +34,25 @@ services:
         reservations:
           memory: 12G
     network_mode: host
+    healthcheck:
+      # Pings the port to ensure the RPC listener is active
+      test: ["CMD-SHELL", "[ -S /tmp/sockets/rpc0.sock ]"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
 
   llama-compute-node1:
-    image: woodhouse:5000/woodhouse-llama:1.0.0
+    image: woodhouse:5000/woodhouse-llama:2.0.1
     container_name: llama-compute-node1   ## Main compute node
     restart: unless-stopped
     volumes:
       - /ai-models:/app/models:ro
       - /sys/devices/system/node:/sys/devices/system/node
+      - /mnt/ramdisk/sockets:/tmp/sockets
     environment:
       FUNCTION: compute
-      RPC_HOST: 0.0.0.0
+      RPC_HOST: /tmp/sockets/rpc1.sock
       RPC_PORT: 50053
       RPC_CACHE: true
       NUM_THREADS: 12
@@ -68,18 +77,29 @@ services:
         reservations:
           memory: 12G
     network_mode: host
+    healthcheck:
+      # Pings the port to ensure the RPC listener is active
+      test: ["CMD-SHELL", "[ -S /tmp/sockets/rpc1.sock ]"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
 
   llama-frontend:
-    image: woodhouse:5000/woodhouse-llama:1.0.0
+    image: woodhouse:5000/woodhouse-llama:2.0.1
     container_name: llama-frontend    ## RPC Coordinator and frontend
     restart: unless-stopped
     volumes:
       - /ai-models:/app/models:ro
+      - /mnt/ramdisk/sockets:/tmp/sockets
     environment:
       FUNCTION: frontend
       MODEL_PATH: /app/models/Qwen3.5-9B-Uncensored-HauhauCS-Aggressive-Q8_0.gguf
       MODEL_CHAT_TEMPLATE:
-      RPC_CLIENTS: 127.0.0.1:50052,127.0.0.1:50053,asushouse:50052
+      CACHE_TYPE_K: bf16
+      CACHE_TYPE_V: bf16
+      # RPC_CLIENTS: 127.0.0.1:50052,127.0.0.1:50053,asushouse:50052
+      RPC_SERVERS: /tmp/sockets/rpc0.sock,/tmp/sockets/rpc1.sock #,asushouse:50052
       WEB_HOST: 0.0.0.0
       WEB_PORT: 8734
       NUM_THREADS: 4
@@ -91,4 +111,21 @@ services:
       - SYS_ADMIN
       - SYS_NICE
       - IPC_LOCK
+    deploy:
+      resources:
+        limits:
+          cpus: 2.0
+          memory: 4G
+        reservations:
+          cpus: 2.0
+          memory: 3G
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
     network_mode: host
+    depends_on:
+      llama-compute-node0:
+        condition: service_healthy
+      llama-compute-node1:
+        condition: service_healthy
