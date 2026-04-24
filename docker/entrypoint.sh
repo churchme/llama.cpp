@@ -42,13 +42,21 @@ elif [[ $FUNCTION == "frontend" ]]; then
     extra_llama_opts+=("--numa numactl")
     echo 0 > /proc/sys/kernel/numa_balancing
   fi
+  if [[ ! -z ${CACHE_TYPE_K} ]]; then
+    extra_llama_opts+=("--cache-type-k ${CACHE_TYPE_K}")
+  fi
+  if [[ ! -z ${CACHE_TYPE_V} ]]; then
+    extra_llama_opts+=("--cache-type-v ${CACHE_TYPE_V}")
+  fi
 
   exec llama-server \
         --host ${WEB_HOST} \
         --port ${WEB_PORT} \
         --model ${MODEL_PATH} \
-        --threads ${NUM_THREADS}\
-        --rpc ${RPC_CLIENTS} \
+        --threads ${NUM_THREADS} \
+        --rpc ${RPC_SERVERS} \
+        --swa-full \
+        --flash-attn on \
         --webui-mcp-proxy \
         ${extra_llama_opts[@]}
 fi
