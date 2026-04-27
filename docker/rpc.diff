@@ -1,0 +1,349 @@
+diff --git a/ggml/include/ggml-rpc.h b/ggml/include/ggml-rpc.h
+index 6fcf5a433..984df8df2 100644
+--- a/ggml/include/ggml-rpc.h
++++ b/ggml/include/ggml-rpc.h
+@@ -8,7 +8,7 @@ extern "C" {
+ 
+ #define RPC_PROTO_MAJOR_VERSION    4
+ #define RPC_PROTO_MINOR_VERSION    0
+-#define RPC_PROTO_PATCH_VERSION    0
++#define RPC_PROTO_PATCH_VERSION    1
+ 
+ #ifdef  __cplusplus
+ static_assert(GGML_OP_COUNT == 96, "GGML_OP_COUNT has changed - update RPC_PROTO_PATCH_VERSION");
+diff --git a/ggml/src/ggml-rpc/ggml-rpc.cpp b/ggml/src/ggml-rpc/ggml-rpc.cpp
+index 017ef0af3..91342ef9e 100644
+--- a/ggml/src/ggml-rpc/ggml-rpc.cpp
++++ b/ggml/src/ggml-rpc/ggml-rpc.cpp
+@@ -23,6 +23,7 @@
+ #  include <arpa/inet.h>
+ #  include <sys/socket.h>
+ #  include <sys/types.h>
++#  include <sys/un.h>
+ #  include <netinet/in.h>
+ #  include <netinet/tcp.h>
+ #  include <netdb.h>
+@@ -391,6 +392,24 @@ struct ggml_backend_rpc_buffer_context {
+ 
+ // RPC helper functions
+ 
++// NOTE: this is copied from server-http.cpp to avoid extra linking
++static std::string
++unescape_abstract_namespace_unix_domain(const std::string &s) {
++  if (s.size() > 1 && s[0] == '@') {
++    auto ret = s;
++    ret[0] = '\0';
++    return ret;
++  }
++  return s;
++}
++
++// NOTE: this is copied from common.cpp to avoid linking with libcommon
++// remove when moving to c++20
++inline bool string_ends_with(std::string_view str, std::string_view suffix) {
++    return str.size() >= suffix.size() &&
++           str.compare(str.size() - suffix.size(), suffix.size(), suffix) == 0;
++}
++
+ // Computes FNV-1a hash of the data
+ static uint64_t fnv_hash(const uint8_t * data, size_t len) {
+     const uint64_t fnv_prime = 0x100000001b3ULL;
+@@ -429,70 +448,96 @@ static bool set_reuse_addr(sockfd_t sockfd) {
+     return ret == 0;
+ }
+ 
+-static std::shared_ptr<socket_t> socket_connect(const char * host, int port) {
+-    struct sockaddr_in addr;
+-    auto sockfd = socket(AF_INET, SOCK_STREAM, 0);
++static std::shared_ptr<socket_t> socket_connect(const char * host, int port, bool is_sock) {
++    auto sockfd = is_sock ? socket(AF_UNIX, SOCK_STREAM, 0)
++                          : socket(AF_INET, SOCK_STREAM, 0);
+     auto sock_ptr = make_socket(sockfd);
+     if (sock_ptr == nullptr) {
+         return nullptr;
+     }
+-    if (!set_no_delay(sockfd)) {
+-        GGML_LOG_ERROR("Failed to set TCP_NODELAY\n");
+-        return nullptr;
+-    }
+-    addr.sin_family = AF_INET;
+-    addr.sin_port = htons(port);
+-    struct hostent * server = gethostbyname(host);
+-    if (server == NULL) {
+-        GGML_LOG_ERROR("Cannot resolve host '%s'\n", host);
+-        return nullptr;
++
++    struct sockaddr_storage addr_store;
++    memset(&addr_store, 0, sizeof(addr_store));
++    socklen_t addr_len = 0;
++
++    if (is_sock) {
++        struct sockaddr_un *serv_addr = (struct sockaddr_un *)&addr_store;
++        serv_addr->sun_family = AF_UNIX;
++        auto unescaped_host = unescape_abstract_namespace_unix_domain(host);
++        std::copy(unescaped_host.begin(), unescaped_host.end(), serv_addr->sun_path);
++        addr_len = sizeof(struct sockaddr_un);
++    } else {
++        if (!set_no_delay(sockfd)) {
++            GGML_LOG_ERROR("Failed to set TCP_NODELAY\n");
++            return nullptr;
++        }
++        struct sockaddr_in *serv_addr = (struct sockaddr_in *)&addr_store;
++        serv_addr->sin_family = AF_INET;
++        serv_addr->sin_addr.s_addr = inet_addr(host);
++        serv_addr->sin_port = htons(port);
++        addr_len = sizeof(struct sockaddr_in);
+     }
+-    memcpy(&addr.sin_addr.s_addr, server->h_addr, server->h_length);
+-    if (connect(sock_ptr->fd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
++
++    if (connect(sock_ptr->fd, (struct sockaddr *) &addr_store, addr_len) < 0) {
+         return nullptr;
+     }
+     return sock_ptr;
+ }
+ 
+-static std::shared_ptr<socket_t> socket_accept(sockfd_t srv_sockfd) {
++static std::shared_ptr<socket_t> socket_accept(sockfd_t srv_sockfd, bool is_sock) {
+     auto client_socket_fd = accept(srv_sockfd, NULL, NULL);
+     auto client_socket = make_socket(client_socket_fd);
+     if (client_socket == nullptr) {
+         return nullptr;
+     }
+-    if (!set_no_delay(client_socket_fd)) {
++    if (!is_sock && !set_no_delay(client_socket_fd)) {
+         GGML_LOG_ERROR("Failed to set TCP_NODELAY\n");
+         return nullptr;
+     }
+     return client_socket;
+ }
+ 
+-static std::shared_ptr<socket_t> create_server_socket(const char * host, int port) {
+-    auto sockfd = socket(AF_INET, SOCK_STREAM, 0);
+-    auto sock = make_socket(sockfd);
+-    if (sock == nullptr) {
++static std::shared_ptr<socket_t> create_server_socket(const char * host, int port, bool is_sock) {
++    auto sockfd = is_sock ? socket(AF_UNIX, SOCK_STREAM, 0)
++                          : socket(AF_INET, SOCK_STREAM, 0);
++    auto sock_ptr = make_socket(sockfd);
++    if (sock_ptr == nullptr) {
+         return nullptr;
+     }
+     if (!set_reuse_addr(sockfd)) {
+         GGML_LOG_ERROR("Failed to set SO_REUSEADDR\n");
+         return nullptr;
+     }
+-    if (inet_addr(host) == INADDR_NONE) {
++    if (!is_sock && inet_addr(host) == INADDR_NONE) {
+         GGML_LOG_ERROR("Invalid host address: %s\n", host);
+         return nullptr;
+     }
+-    struct sockaddr_in serv_addr;
+-    serv_addr.sin_family = AF_INET;
+-    serv_addr.sin_addr.s_addr = inet_addr(host);
+-    serv_addr.sin_port = htons(port);
+ 
+-    if (bind(sockfd, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) < 0) {
++    struct sockaddr_storage addr_store;
++    memset(&addr_store, 0, sizeof(addr_store));
++    socklen_t addr_len = 0;
++
++    if (is_sock) {
++        std::filesystem::remove(host);
++        struct sockaddr_un *serv_addr = (struct sockaddr_un *)&addr_store;
++        serv_addr->sun_family = AF_UNIX;
++        auto unescaped_host = unescape_abstract_namespace_unix_domain(host);
++        std::copy(unescaped_host.begin(), unescaped_host.end(), serv_addr->sun_path);
++        addr_len = sizeof(struct sockaddr_un);
++    } else {
++        struct sockaddr_in *serv_addr = (struct sockaddr_in *)&addr_store;
++        serv_addr->sin_family = AF_INET;
++        serv_addr->sin_addr.s_addr = inet_addr(host);
++        serv_addr->sin_port = htons(port);
++        addr_len = sizeof(struct sockaddr_in);
++    }
++    if (bind(sockfd, (struct sockaddr *) &addr_store, addr_len) < 0) {
+         return nullptr;
+     }
+     if (listen(sockfd, 1) < 0) {
+         return nullptr;
+     }
+-    return sock;
++    return sock_ptr;
+ }
+ 
+ static bool send_data(sockfd_t sockfd, const void * data, size_t size) {
+@@ -948,18 +993,23 @@ static bool recv_msg(socket_t * sock, std::vector<uint8_t> & input) {
+     return recv_data(sock, input.data(), size);
+ }
+ 
+-static bool parse_endpoint(const std::string & endpoint, std::string & host, int & port) {
++static bool parse_endpoint(const std::string & endpoint, std::string & host, int & port, bool & is_sock) {
++    if (string_ends_with(std::string(endpoint), ".sock")) {
++        host = endpoint;
++        port = 0;
++        is_sock = true;
++        return true;
++    }
++
+     size_t pos = endpoint.find(':');
+     if (pos == std::string::npos) {
+-        return false;
+-    }
+-    host = endpoint.substr(0, pos);
+-    try {
++        host = endpoint.substr(0, pos);
+         port = std::stoi(endpoint.substr(pos + 1));
+-    } catch (...) {
+-        return false;
++        is_sock = false;
++        return true;
+     }
+-    return true;
++
++    return false;
+ }
+ 
+ // RPC request : | rpc_cmd (1 byte) | request_size (8 bytes) | request_data (request_size bytes) |
+@@ -1035,7 +1085,8 @@ static std::shared_ptr<socket_t> get_socket(const std::string & endpoint) {
+     }
+     std::string host;
+     int port;
+-    if (!parse_endpoint(endpoint, host, port)) {
++    bool is_sock;
++    if (!parse_endpoint(endpoint, host, port, is_sock)) {
+         GGML_LOG_ERROR("Failed to parse endpoint: %s\n", endpoint.c_str());
+         return nullptr;
+     }
+@@ -1052,7 +1103,7 @@ static std::shared_ptr<socket_t> get_socket(const std::string & endpoint) {
+ #else
+     GGML_UNUSED(initialized);
+ #endif
+-    auto sock = socket_connect(host.c_str(), port);
++    auto sock = socket_connect(host.c_str(), port, is_sock);
+     if (sock == nullptr) {
+         return nullptr;
+     }
+@@ -2384,20 +2435,40 @@ void ggml_backend_rpc_start_server(const char * endpoint, const char * cache_dir
+         fprintf(stderr, "Invalid arguments to ggml_backend_rpc_start_server\n");
+         return;
+     }
+-    std::vector<ggml_backend_t> backends;
+-    printf("Starting RPC server v%d.%d.%d\n",
++    std::string host;
++    int port;
++    bool is_sock;
++    if (!parse_endpoint(endpoint, host, port, is_sock)) {
++        GGML_LOG_ERROR("Failed to parse endpoint: %s\n", endpoint);
++        return;
++    }
++
++    #ifdef GGML_RPC_RDMA
++        printf("  transport      : TCP (RDMA auto-negotiate enabled)\n");
++    #else
++        printf("  transport      : TCP\n");
++    #endif // GGML_RPC_RDMA
++
++    fprintf(stderr, "Starting RPC server v%d.%d.%d\n",
+         RPC_PROTO_MAJOR_VERSION,
+         RPC_PROTO_MINOR_VERSION,
+         RPC_PROTO_PATCH_VERSION);
+-    printf("  endpoint       : %s\n", endpoint);
+-    printf("  local cache    : %s\n", cache_dir ? cache_dir : "n/a");
+-    printf("Devices:\n");
++    if (is_sock) {
++        fprintf(stderr, "  endpoint       : %s\n", host.c_str());
++    } else {
++        fprintf(stderr, "  endpoint       : %s:%d\n", host.c_str(), port);
++    }
++    fprintf(stderr, "  local cache    : %s\n", cache_dir ? cache_dir : "n/a");
++    fprintf(stderr, "Devices:\n");
++
++    std::vector<ggml_backend_t> backends;
+     for (size_t i = 0; i < n_devices; i++) {
+         auto dev = devices[i];
+         size_t free, total;
+         ggml_backend_dev_memory(dev, &free, &total);
+         printf("  %s: %s (%zu MiB, %zu MiB free)\n", ggml_backend_dev_name(dev), ggml_backend_dev_description(dev),
+                total / 1024 / 1024, free / 1024 / 1024);
++        fflush(stdout);
+         auto backend = ggml_backend_dev_init(dev, nullptr);
+         if (!backend) {
+             fprintf(stderr, "Failed to create backend for device %s\n", dev->iface.get_name(dev));
+@@ -2413,17 +2484,6 @@ void ggml_backend_rpc_start_server(const char * endpoint, const char * cache_dir
+         }
+     }
+ 
+-    std::string host;
+-    int port;
+-    if (!parse_endpoint(endpoint, host, port)) {
+-        return;
+-    }
+-
+-#ifdef GGML_RPC_RDMA
+-    printf("  transport      : TCP (RDMA auto-negotiate enabled)\n");
+-#else
+-    printf("  transport      : TCP\n");
+-#endif // GGML_RPC_RDMA
+ #ifdef _WIN32
+     {
+         WSADATA wsaData;
+@@ -2434,13 +2494,13 @@ void ggml_backend_rpc_start_server(const char * endpoint, const char * cache_dir
+         }
+     }
+ #endif
+-    auto server_socket = create_server_socket(host.c_str(), port);
++    auto server_socket = create_server_socket(host.c_str(), port, is_sock);
+     if (server_socket == nullptr) {
+         fprintf(stderr, "Failed to create server socket\n");
+         return;
+     }
+     while (true) {
+-        auto client_socket = socket_accept(server_socket->fd);
++        auto client_socket = socket_accept(server_socket->fd, is_sock);
+         if (client_socket == nullptr) {
+             fprintf(stderr, "Failed to accept client connection\n");
+             return;
+diff --git a/tools/rpc/rpc-server.cpp b/tools/rpc/rpc-server.cpp
+index 03ab78e5f..cb10d2067 100644
+--- a/tools/rpc/rpc-server.cpp
++++ b/tools/rpc/rpc-server.cpp
+@@ -25,6 +25,13 @@
+ #include <pwd.h>
+ #endif
+ 
++// NOTE: this is copied from common.cpp to avoid linking with libcommon
++// remove when moving to c++20
++inline bool string_ends_with(std::string_view str, std::string_view suffix) {
++    return str.size() >= suffix.size() &&
++           str.compare(str.size() - suffix.size(), suffix.size(), suffix) == 0;
++}
++
+ // NOTE: this is copied from common.cpp to avoid linking with libcommon
+ #ifdef _WIN32
+ static std::wstring utf8_to_wstring(const std::string & str) {
+@@ -298,7 +305,14 @@ int main(int argc, char * argv[]) {
+         return 1;
+     }
+ 
+-    if (params.host != "127.0.0.1") {
++    std::string endpoint;
++    if (string_ends_with(std::string(params.host), ".sock")) {
++        endpoint = params.host;
++    } else {
++        endpoint = params.host + ":" + std::to_string(params.port);
++    }
++
++    if (params.host != "127.0.0.1" and (!string_ends_with(endpoint, ".sock"))) {
+         fprintf(stderr, "\n");
+         fprintf(stderr, "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
+         fprintf(stderr, "WARNING: Host ('%s') is != '127.0.0.1'\n", params.host.c_str());
+@@ -313,7 +327,7 @@ int main(int argc, char * argv[]) {
+         fprintf(stderr, "No devices found\n");
+         return 1;
+     }
+-    std::string endpoint = params.host + ":" + std::to_string(params.port);
++
+     const char * cache_dir = nullptr;
+     std::string cache_dir_str;
+     if (params.use_cache) {
