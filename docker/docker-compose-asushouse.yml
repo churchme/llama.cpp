@@ -1,6 +1,6 @@
 services:
   llama-compute:
-    image: woodhouse:5000/woodhouse-llama:2.0.1-avx2
+    image: woodhouse:5000/woodhouse-llama:3.0.0-avx2
     container_name: llama-compute
     restart: unless-stopped
     volumes:
