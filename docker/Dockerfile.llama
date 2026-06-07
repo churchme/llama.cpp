@@ -20,7 +20,8 @@ ENV \
 
 ARG ZYPPER_DEPS="libgomp1-gcc7 \
                  numactl \
-                 liburing2\
+                 liburing2 \
+                 openblas-devel \
                 "
 
 # skip openblas-devel until fixed upstream for RPC

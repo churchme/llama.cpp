@@ -1,6 +1,6 @@
 services:
   llama-compute-node0:
-    image: woodhouse:5000/woodhouse-llama:3.0.0
+    image: woodhouse:5000/woodhouse-llama:3.0.1
     container_name: llama-compute-node0   ## Main compute node
     restart: unless-stopped
     volumes:
@@ -44,7 +44,7 @@ services:
       start_period: 10s
 
   llama-compute-node1:
-    image: woodhouse:5000/woodhouse-llama:3.0.0
+    image: woodhouse:5000/woodhouse-llama:3.0.1
     container_name: llama-compute-node1   ## Main compute node
     restart: unless-stopped
     volumes:
@@ -88,7 +88,7 @@ services:
       start_period: 10s
 
   llama-frontend:
-    image: woodhouse:5000/woodhouse-llama:3.0.0
+    image: woodhouse:5000/woodhouse-llama:3.0.1
     container_name: llama-frontend    ## RPC Coordinator and frontend
     restart: unless-stopped
     volumes:
@@ -96,11 +96,11 @@ services:
       - /mnt/ramdisk/sockets:/tmp/sockets
     environment:
       FUNCTION: frontend
-      MODEL_PATH: /app/models/Qwen3.5-9B-Uncensored-HauhauCS-Aggressive-Q8_0.gguf
+      MODEL_PATH: /app/models/Qwen3.5-9B-Uncensored-HauhauCS-Aggressive-Q4_K_M.gguf
       MODEL_CHAT_TEMPLATE:
       CACHE_TYPE_K: bf16
       CACHE_TYPE_V: bf16
-      RPC_SERVER: 127.0.0.1:50052,127.0.0.1:50053,asushouse:50052
+      RPC_SERVERS: 127.0.0.1:50052,127.0.0.1:50053 #,asushouse:50052
       # RPC_SERVERS: /tmp/sockets/rpc0.sock,/tmp/sockets/rpc1.sock,asushouse:50052
       WEB_HOST: 0.0.0.0
       WEB_PORT: 8734
